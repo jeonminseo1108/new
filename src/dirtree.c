@@ -3,8 +3,8 @@
 //
 /// @file
 /// @brief resursively traverse directory tree and list all entries
-/// @author <yourname>
-/// @studid <studentid>
+/// @author <Jeon minseo>
+/// @studid <2019-19932>
 //--------------------------------------------------------------------------------------------------
 
 #define _GNU_SOURCE
@@ -103,7 +103,50 @@ static int dirent_compare(const void *a, const void *b)
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
 {
-  // TODO
+	DIR *dir= opendir(dn);
+	if(!dir){
+		perror("opendir");
+		return;
+	}
+	struct dirent *entry;
+	while ((entry=getNext(dir)) != NULL){
+		char path[PATH_MAX];
+		snprintf(path, sizeof(path), "%s/%s",dn,entry->d_name);
+
+		struct stat sb;
+		if(stat(path, &sb) == -1){
+			perror("stat");
+			continue;
+		}
+
+		if(flags & F_TREE){
+			printf("%s/%s\n", pstr, entry->d_name);
+		}
+		//update summary
+		if(S_ISDIR(sb.st_mode)){
+			stats->dirs++;
+			char next_pstr[256];
+			snprintf(next_pstr, sizeof(next_pstr), "%s    ", pstr);
+			processDir(path, next_pstr, stats, flags);
+		}
+		else if(S_ISREG(sb.st_mode)){
+			stats->files++;
+		}
+		else if(S_ISLNK(sb.st_mode)){
+			stats->links++;
+		}
+		else {
+			perror("what is this?");
+		}
+		//detail 
+		if(flags & F_VERBOSE){
+			struct passwd *password = getpwuid(sb.st_uid);
+			struct group *grp = getgrgrid(sb.st_gid);
+			printf("  %s:%s %lld %lld\n", password->pw_name, grp->gr_name, sb.st_size, sb.st_blocks);
+		}
+	}
+	closedir(dir);// close directory
+	return;
 }
 
 
@@ -196,7 +239,19 @@ int main(int argc, char *argv[])
   memset(&tstat, 0, sizeof(tstat));
   //...
 
-
+  for(int i=0;i<ndir;i++){
+	  struct summary dstat = {0};// each directory summary
+	  printf("Analyzing directory: %s\n",directories[i]);
+	  //recursively find
+	  processDir(directories[i], "",&dstat, flags);
+	  if(flags & F_SUMMARY){
+		  //print
+		  printf("Files: %d, Directories: %d, Links: %d\n", dstat.files, dstat.dirs, dstat.links);
+		  tstat.files += dstat.files;
+		  tstat.dirs += dstat.dirs;
+		  tstat.links += dstat.links;
+	  }
+  }
   //
   // print grand total
   //
