@@ -246,10 +246,18 @@ int main(int argc, char *argv[])
 	  processDir(directories[i], "",&dstat, flags);
 	  if(flags & F_SUMMARY){
 		  //print
-		  printf("Files: %d, Directories: %d, Links: %d\n", dstat.files, dstat.dirs, dstat.links);
+
+		  printf("%u %s, %u %s, %u %s, %u %s, and %u %s\n",
+				  stats->files, (stats->files==1) ? "file":"files",
+				  stats->dirs, (stats->dirs==1) ? "directory":"directories",
+				  stats->links, (stats->links==1) ? "link":"links",
+				  stats->fifos, (stats->fifos==1) ? "pipe":"pipes",
+				  stats->socks, (stats->socks==1) ? "socket":"sockets");
 		  tstat.files += dstat.files;
 		  tstat.dirs += dstat.dirs;
 		  tstat.links += dstat.links;
+		  tstat.fifos += dstat.fifos;
+		  tstat.socks += dstat.socks;
 	  }
   }
   //
