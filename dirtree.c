@@ -94,7 +94,87 @@ static int dirent_compare(const void *a, const void *b)
   return strcmp(e1->d_name, e2->d_name);
 }
 
+char* gen_tree_shape(bool is_last, unsigned int flags, const char *pstr) {
+	int len = strlen(pstr);
+	char *result;
+	int warn = 0;
+	if(flags & F_TREE) {
+		result = (char*)malloc(sizeof(char)*(pstr_len + 3));
+		if(result == NULL) panic("Out of memory.");
+		strncpy(result, pstr, len);
+		result[len + 2] = '\0';
+		if(len > 1) {
+			if(result[len - 2] == '`') result[len - 2] = ' ';
+			result[len - 1] = ' ';
+		}
+		result[len] = is_last ? '`' : '|';
+		result[len + 1] = '-';
+	}
+	else {
+		warn = asprintf(&result, "%s  ", pstr);
+		if(warn == -1) panic("Out of memory.");
+	}
 
+	return result;
+}
+
+void print_verbose(struct stat *stat){
+	struct passwd *upwd= getpwuid(stat->st_uid);
+	struct group *ggrp = getgrgid(stat->st_gid);
+	char type;
+	if (upwd == NULL || ggrp == NULL) panic("\nError on getpwuid /getgrgid.");
+	char *user = upwd->pw_name;
+	char *group = ggrp->gr_name;
+	
+	if(S_ISREG(fmode)) type = ' ';
+	else if(S_ISDIR(fmode)) type = 'd';
+	else if(S_ISCHR(fmode)) type = 'c';
+	else if(S_ISLNK(fmode)) type = 'l';
+	else if(S_ISFIFO(fmode)) type = 'f';
+	else if(S_ISBLK(fmode)) type = 'b';
+	else if(S_ISSOCK(fmode)) type = 's';
+	else type = '\0';
+
+	printf("  %8s:%-8s  %10ld  %8ld  %c", user, group, stat->st_size, stat->st_blocks, type);
+
+}
+
+void print_errno(int errno_result, const char *pstr, unsigned int flags){
+	char *error_pstr = gen_tree_shape(true, flags, pstr);
+	switch(errno) {
+		case EACCES:
+			printf("%sERROR: Permission denied\n", err_pstr);
+			break;
+		case ENOENT:
+			printf("%sERROR: No such file or directory\n", err_pstr);
+			break;
+		case ENOTDIR:
+			printf("%sERROR: Not a directory\n", err_pstr);
+			break;
+		case ENOMEM:
+			panic("Out of memory.");
+			break;
+		default:
+			// default error handling
+			printf("ERROR: error code %d\n", errno);
+			panic("quit process");
+	}
+	free(err_pstr);
+	return;
+}
+
+void update_stats(struct summary *stats, struct stat *st){
+	
+	stats->files += S_ISREG(st->st_mode); 
+	stats->dirs += S_ISDIR(st->st_mode);
+	stats->links += S_ISLNK(st->st_mode);
+	stats->fifos += S_ISFIFO(st->st_mode);
+	stats->socks += S_ISSOCK(st->st_mode);
+	stats->size += st->st_size;
+	stats->blocks += st->st_blocks;
+
+	return;
+}
 /// @brief recursively process directory @a dn and print its tree
 ///
 /// @param dn absolute or relative path string
@@ -103,60 +183,10 @@ static int dirent_compare(const void *a, const void *b)
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
 {
-	int cnt=0;
-	struct dirent *entries[MAX_ENTRIES];//dfmksdkgfdkjgkfgdjgfjgjkgkjfkgjfkjgfkjgfjfkjgfkjgfjgkfjgkfjgkfjkgjfkjgfkjgjfkgjfkjgjfgjfkjgfkjgfjkgkj
-	struct dirent *entry;
-	DIR *dir= opendir(dn);
 	
-	if(!dir){
-		printf("%s%s ERROR: %s\n", pstr, dn, strerror(errno));
-		return;
-	}
-	
-	//directory entry to array
-	while((entry=getNext(dir))!=NULL && cnt < MAX_ENTRIES){
-		entries[cnt++]=entry;
-	}
-	//sort 
-	qsort(entries, cnt, sizeof(struct dirent *), dirent_compare);
 
-	for(int i=0;i<cnt;i++){
-		char path[PATH_MAX];
-		snprintf(path, sizeof(path), "%s/%s",dn,entries[i]->d_name);
 
-		struct stat sb;
-		if(stat(path, &sb) == -1){
-			printf("%s%s ERROR: %s\n", pstr, entries[i]->d_name, strerror(errno));
-			continue;
-		}
 
-		if(flags & F_TREE){
-			printf("%s/%s\n", pstr, entries[i]->d_name);
-		}
-		//update summary
-		if(S_ISDIR(sb.st_mode)){
-			stats->dirs++;
-			char next_pstr[256];
-			snprintf(next_pstr, sizeof(next_pstr), "%s    ", pstr);
-			processDir(path, next_pstr, stats, flags);
-		}
-		else if(S_ISREG(sb.st_mode)){
-			stats->files++;
-		}
-		else if(S_ISLNK(sb.st_mode)){
-			stats->links++;
-		}
-		else {
-			perror("what is this?");
-		}
-		//detail 
-		if(flags & F_VERBOSE){
-			struct passwd *password = getpwuid(sb.st_uid);
-			struct group *grp = getgrgid(sb.st_gid);
-			printf("  %s:%s %ld %ld\n", password->pw_name, grp->gr_name, sb.st_size, sb.st_blocks);
-		}
-	}
-	closedir(dir);// close directory
 	return;
 }
 
@@ -275,6 +305,8 @@ int main(int argc, char *argv[])
 		  else printf("%s\n\n", summary);
 		  free(summary);
 		  //
+		  tstat.blocks += dstat.blocks;
+		  tstat.size += dstat.size;
 		  tstat.files += dstat.files;
 		  tstat.dirs += dstat.dirs;
 		  tstat.links += dstat.links;
