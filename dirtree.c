@@ -103,24 +103,35 @@ static int dirent_compare(const void *a, const void *b)
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
 {
+	int cnt=0;
+	struct dirent *entries[MAX_ENTRIES];//dfmksdkgfdkjgkfgdjgfjgjkgkjfkgjfkjgfkjgfjfkjgfkjgfjgkfjgkfjgkfjkgjfkjgfkjgjfkgjfkjgjfgjfkjgfkjgfjkgkj
+	struct dirent *entry;
 	DIR *dir= opendir(dn);
+	
 	if(!dir){
-		perror("opendir");
+		printf("%s%s ERROR: %s\n", pstr, dn, strerror(errno));
 		return;
 	}
-	struct dirent *entry;
-	while ((entry=getNext(dir)) != NULL){
+	
+	//directory entry to array
+	while((entry=getNext(dir))!=NULL && cnt < MAX_ENTRIES){
+		entries[cnt++]=entry;
+	}
+	//sort 
+	qsort(entries, cnt, sizeof(struct dirent *), dirent_compare);
+
+	for(int i=0;i<cnt;i++){
 		char path[PATH_MAX];
-		snprintf(path, sizeof(path), "%s/%s",dn,entry->d_name);
+		snprintf(path, sizeof(path), "%s/%s",dn,entries[i]->d_name);
 
 		struct stat sb;
 		if(stat(path, &sb) == -1){
-			perror("stat");
+			printf("%s%s ERROR: %s\n", pstr, entries[i]->d_name, strerror(errno));
 			continue;
 		}
 
 		if(flags & F_TREE){
-			printf("%s/%s\n", pstr, entry->d_name);
+			printf("%s/%s\n", pstr, entries[i]->d_name);
 		}
 		//update summary
 		if(S_ISDIR(sb.st_mode)){
@@ -141,8 +152,8 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		//detail 
 		if(flags & F_VERBOSE){
 			struct passwd *password = getpwuid(sb.st_uid);
-			struct group *grp = getgrgrid(sb.st_gid);
-			printf("  %s:%s %lld %lld\n", password->pw_name, grp->gr_name, sb.st_size, sb.st_blocks);
+			struct group *grp = getgrgid(sb.st_gid);
+			printf("  %s:%s %ld %ld\n", password->pw_name, grp->gr_name, sb.st_size, sb.st_blocks);
 		}
 	}
 	closedir(dir);// close directory
@@ -241,18 +252,29 @@ int main(int argc, char *argv[])
 
   for(int i=0;i<ndir;i++){
 	  struct summary dstat = {0};// each directory summary
-	  printf("Analyzing directory: %s\n",directories[i]);
+	  if(flags & F_SUMMARY) {
+	  	if(flags & F_VERBOSE) printf("Name                                                        User:Group           Size    Blocks Type\n");
+	  	else printf("Name                                                                                                \n");
+		printf("----------------------------------------------------------------------------------------------------\n");
+	  }
+	  printf("%s\n",directories[i]);
 	  //recursively find
 	  processDir(directories[i], "",&dstat, flags);
 	  if(flags & F_SUMMARY){
 		  //print
-
-		  printf("%u %s, %u %s, %u %s, %u %s, and %u %s\n",
-				  stats->files, (stats->files==1) ? "file":"files",
-				  stats->dirs, (stats->dirs==1) ? "directory":"directories",
-				  stats->links, (stats->links==1) ? "link":"links",
-				  stats->fifos, (stats->fifos==1) ? "pipe":"pipes",
-				  stats->socks, (stats->socks==1) ? "socket":"sockets");
+		  char *summary;
+		  printf("----------------------------------------------------------------------------------------------------\n");
+		  int warn = asprintf(&summary,"%u %s, %u %s, %u %s, %u %s, and %u %s\n",
+				  dstat.files, (dstat.files==1) ? "file":"files",
+				  dstat.dirs, (dstat.dirs==1) ? "directory":"directories",
+				  dstat.links, (dstat.links==1) ? "link":"links",
+				  dstat.fifos, (dstat.fifos==1) ? "pipe":"pipes",
+				  dstat.socks, (dstat.socks==1) ? "socket":"sockets");
+		  if(warn==-1) panic("Out of memory.");
+		  if(flags & F_VERBOSE) printf("%-68.68s   %14lld %9lld\n\n", summary, dstat.size, dstat.blocks);
+		  else printf("%s\n\n", summary);
+		  free(summary);
+		  //
 		  tstat.files += dstat.files;
 		  tstat.dirs += dstat.dirs;
 		  tstat.links += dstat.links;
