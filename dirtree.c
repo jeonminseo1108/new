@@ -10,6 +10,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -187,8 +188,10 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 	int warn=0;
 	
 	if (dn[strlen(dn)-1] != '/'){
-		warn = asprintf(&dn, "%s/", dn);
+		char *new_dn;
+		warn = asprintf(&new_dn, "%s/", dn);
 		if(warn == -1) panic("Out of memory.");
+		dn=new_dn;
 	}
 	DIR *dir = opendir(dn);
 	
@@ -223,7 +226,7 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		if((flags & F_VERBOSE) && strlen(final_pstr) > 54) printf("%-51.51s...", final_pstr);
 		else printf("%-54s",final_pstr);
 		free(final_pstr);
-		if(flags & F_VERBOSE) print_verbose(i_stat);
+		if(flags & F_VERBOSE) print_verbose(&i_stat);
 		printf("\n");
 
 		update_stats(stats, &i_stat);
