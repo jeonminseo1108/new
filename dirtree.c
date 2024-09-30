@@ -218,15 +218,15 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		char *next_pstr = gen_tree_shape(i == num - 1, flags, pstr);
 		//printDir
 		char *final_pstr;
-		warn = asprintf(&final_ptr, "%s%s", next_pstr, dn);
+		warn = asprintf(&final_pstr, "%s%s", next_pstr, dn);
 		if (warn == -1) panic("Out of memory.");
-		if((flags & F_VERBOSE) && strlen(final_ptr) > 54) printf("%-51.51s...", final_ptr);
-		else printf("%-54s",final_ptr);
-		free(final_ptr);
+		if((flags & F_VERBOSE) && strlen(final_pstr) > 54) printf("%-51.51s...", final_pstr);
+		else printf("%-54s",final_pstr);
+		free(final_pstr);
 		if(flags & F_VERBOSE) print_verbose(i_stat);
 		printf("\n");
 
-		update_stat(stats, &i_stat);
+		update_stats(stats, &i_stat);
 		
 		if (S_ISDIR(i_stat.st_mode)) {
 			warn = asprintf(&path, "%s/", path);
