@@ -139,7 +139,7 @@ void print_verbose(struct stat *stat){
 
 }
 
-void print_errno(int errno_result, const char *pstr, unsigned int flags){
+void print_errno(const char *pstr, unsigned int flags){
 	char *error_pstr = gen_tree_shape(true, flags, pstr);
 	switch(errno) {
 		case EACCES:
@@ -163,30 +163,81 @@ void print_errno(int errno_result, const char *pstr, unsigned int flags){
 	return;
 }
 
-void update_stats(struct summary *stats, struct stat *st){
+void update_stats(struct summary *stats, struct stat *i_stat){
 	
-	stats->files += S_ISREG(st->st_mode); 
-	stats->dirs += S_ISDIR(st->st_mode);
-	stats->links += S_ISLNK(st->st_mode);
-	stats->fifos += S_ISFIFO(st->st_mode);
-	stats->socks += S_ISSOCK(st->st_mode);
-	stats->size += st->st_size;
-	stats->blocks += st->st_blocks;
+	stats->files += S_ISREG(i_stat->st_mode); 
+	stats->dirs += S_ISDIR(i_stat->st_mode);
+	stats->links += S_ISLNK(i_stat->st_mode);
+	stats->fifos += S_ISFIFO(i_stat->st_mode);
+	stats->socks += S_ISSOCK(i_stat->st_mode);
+	stats->size += i_stat->st_size;
+	stats->blocks += i_stat->st_blocks;
 
 	return;
 }
+
 /// @brief recursively process directory @a dn and print its tree
-///
+///char *next_pstr = genPstr(i == childs - 1, flags, pstr);
 /// @param dn absolute or relative path string
 /// @param pstr prefix string printed in front of each entry
 /// @param stats pointer to statistics
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
 {
+	int warn=0;
 	
+	if (dn[strlen(dn)-1] != '/'){
+		warn = asprintf(&dn, "%s/", dn);
+		if(warn == -1) panic("Out of memory.");
+	}
+	DIR *dir = opendir(dn);
+	
+	if(errno) print_errno(pstr, flags);
+	struct dirent *dirents = (struct dirent*)malloc(sizeof(struct dirent));
+	if (dirents == NULL) panic("Out of memory.");
+	struct dirent *getnext_result;
+	int num = 0;
 
+	getnext_result = getNext(dir);
+	
+	while(getnext_result != NULL) {
+		dirents = (struct dirent*)realloc(dirents, (num + 1) * sizeof(struct dirent));
+		if(dirents == NULL) panic("Out of memory.");
+		dirents[num++] = *getnext_result;
+		getnext_result = getNext(dir);
+	}
 
+	qsort(dirents, num, sizeof(struct dirent), dirent_compare);
+	
+	for(int i=0;i< num; i++){
+		char *path;
+		struct stat i_stat;
+		warn = asprintf(&path, "%s%s", dn, dirents[i].d_name);
+		if (warn == -1) panic("Out of memory.");
+		lstat(path, &i_stat);
+		char *next_pstr = gen_tree_shape(i == num - 1, flags, pstr);
+		//printDir
+		char *final_pstr;
+		warn = asprintf(&final_ptr, "%s%s", next_pstr, dn);
+		if (warn == -1) panic("Out of memory.");
+		if((flags & F_VERBOSE) && strlen(final_ptr) > 54) printf("%-51.51s...", final_ptr);
+		else printf("%-54s",final_ptr);
+		free(final_ptr);
+		if(flags & F_VERBOSE) print_verbose(i_stat);
+		printf("\n");
 
+		update_stat(stats, i_stat);//error일듯
+		
+		if (S_ISDIR(i_stat.st_mode)) {
+			warn = asprintf(&path, "%s/", path);
+			if (warn == -1) panic("Out of memory.");
+			processDir(path, next_pstr, stats, flags);
+		}
+		free(path);
+		free(next_pstr);
+	}
+	closedir(dir);
+	free(dirents);
 	return;
 }
 
