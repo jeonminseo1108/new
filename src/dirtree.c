@@ -51,8 +51,6 @@ void panic(const char *msg)
   exit(EXIT_FAILURE);
 }
 
-#define PANIC_OOM() panic("Out of memory.")
-
 /// @brief read next directory entry from open directory 'dir'. Ignores '.' and '..' entries
 ///
 /// @param dir open DIR* stream
@@ -95,39 +93,52 @@ static int dirent_compare(const void *a, const void *b)
   // otherwise sorty by name
   return strcmp(e1->d_name, e2->d_name);
 }
-
+//--------------------------------------------------------------------------------------------------
+// Function: gen_tree_shape
+// Generates the tree-like structure for directory printing 
+// based on whether the current entry is the last in its directory. 
+// Adds tree branches ("|", "`") if tree view flag is enabled.
+//--------------------------------------------------------------------------------------------------
 char* gen_tree_shape(bool is_last, unsigned int flags, const char *pstr) {
-	int len = strlen(pstr);
-	char *result;
-	int warn = 0;
+	int len = strlen(pstr);// Length of the current prefix string
+	char *result;// Stores the generated tree structure
+	int warn = 0;// Error checking for memory allocation
+	// If F_TREE flag is set(-t), format the output with tree symbols
 	if(flags & F_TREE) {
 		result = (char*)malloc(sizeof(char)*(len + 3));
-		if(result == NULL) panic("Out of memory.");
-		strncpy(result, pstr, len);
-		result[len + 2] = '\0';
+		// Allocate memory for the new tree string
+		if(result == NULL) panic("Out of memory.");// Handle memory allocation failure
+		strncpy(result, pstr, len);// Copy the existing prefix
+		result[len + 2] = '\0';// Null-terminate the string
 		if(len > 1) {
-			if(result[len - 2] == '`') result[len - 2] = ' ';
+			if(result[len - 2] == '`') result[len - 2] = ' ';// Adjust the tree symbols
 			result[len - 1] = ' ';
 		}
-		result[len] = is_last ? '`' : '|';
-		result[len + 1] = '-';
+		result[len] = is_last ? '`' : '|';// Set tree symbol depending on last entry
+		result[len + 1] = '-';// Add horizontal branch
 	}
-	else {
+	else {// If tree view is not enabled, just add spaces
 		warn = asprintf(&result, "%s  ", pstr);
 		if(warn == -1) panic("Out of memory.");
 	}
 
 	return result;
 }
-
+//--------------------------------------------------------------------------------------------------
+// Function: print_verbose
+// Prints detailed information about the file or directory 
+// (such as user, group, size, and type) if the verbose flag is enabled.
+//--------------------------------------------------------------------------------------------------
 void print_verbose(struct stat *stat){
-	struct passwd *upwd= getpwuid(stat->st_uid);
-	struct group *ggrp = getgrgid(stat->st_gid);
-	char type;
-	if (upwd == NULL || ggrp == NULL) panic("\nError on getpwuid /getgrgid.");
-	char *user = upwd->pw_name;
-	char *group = ggrp->gr_name;
-	
+	struct passwd *pw= getpwuid(stat->st_uid);// Get user information
+	struct group *grp = getgrgid(stat->st_gid);// Get group information
+	char type;// File type character
+	// If user or group information is unavailable, panic()
+	if (pw == NULL || grp == NULL) panic("\nError on getpwuid /getgrgid.");
+	// Get user and group names
+	char *user = pw->pw_name;
+	char *group = grp->gr_name;
+	// Determine file type
 	if(S_ISREG(stat->st_mode)) type = ' ';
 	else if(S_ISDIR(stat->st_mode)) type = 'd';
 	else if(S_ISCHR(stat->st_mode)) type = 'c';
@@ -136,26 +147,31 @@ void print_verbose(struct stat *stat){
 	else if(S_ISBLK(stat->st_mode)) type = 'b';
 	else if(S_ISSOCK(stat->st_mode)) type = 's';
 	else type = '\0';
-
+	// Print
 	printf("  %8s:%-8s  %10ld  %8ld  %c", user, group, stat->st_size, stat->st_blocks, type);
 
 }
-
+//--------------------------------------------------------------------------------------------------
+// Function: print_errno
+// Handles printing error messages based on the errno value,
+// and appends tree structure if needed.
+//--------------------------------------------------------------------------------------------------
 void print_errno(const char *pstr, unsigned int flags){
+	// Generate tree structure with prefix
 	char *error_pstr = gen_tree_shape(true, flags, pstr);
-	switch(errno) {
-		case EACCES:
-			printf("%sERROR: Permission denied\n", error_pstr);
-			break;
-		case ENOENT:
-			printf("%sERROR: No such file or directory\n", error_pstr);
-			break;
-		case ENOTDIR:
-			printf("%sERROR: Not a directory\n", error_pstr);
-			break;
+	switch(errno) {// Switch case based on the errno value
 		case ENOMEM:
 			panic("Out of memory.");
 			break;
+                case EACCES:
+                        printf("%sERROR: Permission denied\n", error_pstr);
+                        break;
+                case ENOENT:
+                        printf("%sERROR: No such file or directory\n", error_pstr);
+                        break;
+                case ENOTDIR:
+                        printf("%sERROR: Not a directory\n", error_pstr);
+                        break;
 		default:
 			// default error handling
 			printf("ERROR: error code %d\n", errno);
@@ -164,7 +180,11 @@ void print_errno(const char *pstr, unsigned int flags){
 	free(error_pstr);
 	return;
 }
-
+//--------------------------------------------------------------------------------------------------
+// Function: update_stats
+// Updates the summary statistics (total files, directories, links, etc.) 
+// based on the file type and size.
+//--------------------------------------------------------------------------------------------------
 void update_stats(struct summary *stats, struct stat *i_stat){
 	
 	stats->files += S_ISREG(i_stat->st_mode); 
@@ -186,59 +206,80 @@ void update_stats(struct summary *stats, struct stat *i_stat){
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
 {
-	int warn=0;
-	char *new_dn = NULL;	
+	int warn=0;// Variable to track errors
+	char *new_dn = NULL;// Stores the directory path
+	int num =0;// childs
+
+	// Ensure directory path ends with '/'
 	if (dn[strlen(dn)-1] != '/'){
+		// Add '/'
 		warn = asprintf(&new_dn, "%s/", dn);
 		if(warn == -1) panic("Out of memory.");
 	}
-	else {
+	else {// Duplicate the directory name if already properly formatted
 		new_dn = strdup(dn);
 		if (new_dn == NULL) panic("Out of memory.");
 	}
+	// Open the directory stream
 	DIR *dir = opendir(new_dn);
 	if (!dir) {
-		print_errno(pstr, flags);
+		print_errno(pstr, flags);// Print error if unable to open the directory
 		free(new_dn);
 		return;
 	}
-	if(errno) print_errno(pstr, flags);
-
+	if(errno) print_errno(pstr, flags);// Check for additional errors after opening
+	
+	// Allocate memory for directory entries and retrieve the next entry
 	struct dirent *dirents = (struct dirent*)malloc(sizeof(struct dirent));
 	if (dirents == NULL) panic("Out of memory.");
 	struct dirent *getnext_result;
-	int num = 0;
-
+	
+	// Read all directory entries, ignoring "." and ".."
 	getnext_result = getNext(dir);
 	
-	while(getnext_result != NULL) {
+	while(getnext_result != NULL) {// Resize array
 		dirents = (struct dirent*)realloc(dirents, (num + 1) * sizeof(struct dirent));
 		if(dirents == NULL) panic("Out of memory.");
-		dirents[num++] = *getnext_result;
-		getnext_result = getNext(dir);
+		dirents[num++] = *getnext_result;// Store the retrieved entry
+		getnext_result = getNext(dir);// Get the next entry
 	}
-
+	// Sort directory entries
 	qsort(dirents, num, sizeof(struct dirent), dirent_compare);
 	
+	// Iterate through each directory entry and process
 	for(int i=0;i< num; i++){
-		char *path;
-		struct stat i_stat;
+		char *path;// Store the full path
+		struct stat i_stat;// Stat structure to hold file metadata
+
+		// Create the full path of the current entry
 		warn = asprintf(&path, "%s%s", new_dn, dirents[i].d_name);
 		if (warn == -1) panic("Out of memory.");
+
+		// Get metadata for the current file/directory
 		lstat(path, &i_stat);
+
+		// Generate the next level tree structure
 		char *next_pstr = gen_tree_shape(i == num - 1, flags, pstr);
-		//printDir
+		
+		// Print the directory/file name with tree structure
 		char *final_pstr;
 		warn = asprintf(&final_pstr, "%s%s", next_pstr, dirents[i].d_name);
 		if (warn == -1) panic("Out of memory.");
+
+		// Print file information and verbose details
 		if((flags & F_VERBOSE) && strlen(final_pstr) > 54) printf("%-51.51s...", final_pstr);
 		else printf("%-54s",final_pstr);
+
 		free(final_pstr);
+		
+		// If verbose mode is enabled, print additional details
 		if(flags & F_VERBOSE) print_verbose(&i_stat);
 		printf("\n");
-
+		
+		// Update the statistics
 		update_stats(stats, &i_stat);
 		
+		// If the current entry is a directory, recursively process it
 		if (S_ISDIR(i_stat.st_mode)) {
 			warn = asprintf(&path, "%s/", path);
 			if (warn == -1) panic("Out of memory.");
@@ -247,9 +288,10 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		free(path);
 		free(next_pstr);
 	}
-	closedir(dir);
 	free(dirents);
 	free(new_dn);
+	closedir(dir);
+
 	return;
 }
 
@@ -366,8 +408,7 @@ int main(int argc, char *argv[])
 		  if(warn==-1) panic("Out of memory.");
 		  if(flags & F_VERBOSE) printf("%-68.68s   %14lld %9lld\n\n", summary, dstat.size, dstat.blocks);
 		  else printf("%s\n\n", summary);
-		  free(summary);
-		  //
+		  
 		  tstat.blocks += dstat.blocks;
 		  tstat.size += dstat.size;
 		  tstat.files += dstat.files;
@@ -375,6 +416,8 @@ int main(int argc, char *argv[])
 		  tstat.links += dstat.links;
 		  tstat.fifos += dstat.fifos;
 		  tstat.socks += dstat.socks;
+		  
+		  free(summary);
 	  }
   }
   //
