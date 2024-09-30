@@ -51,6 +51,7 @@ void panic(const char *msg)
   exit(EXIT_FAILURE);
 }
 
+#define PANIC_OOM() panic("Out of memory.")
 
 /// @brief read next directory entry from open directory 'dir'. Ignores '.' and '..' entries
 ///
