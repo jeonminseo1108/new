@@ -196,6 +196,11 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		if (new_dn == NULL) panic("Out of memory.");
 	}
 	DIR *dir = opendir(new_dn);
+	if (!dir) {
+		print_errno(pstr, flags);
+		free(new_dn);
+		return;
+	}
 	if(errno) print_errno(pstr, flags);
 
 	struct dirent *dirents = (struct dirent*)malloc(sizeof(struct dirent));
@@ -240,10 +245,10 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		}
 		free(path);
 		free(next_pstr);
-		free(new_dn);
 	}
 	closedir(dir);
 	free(dirents);
+	free(new_dn);
 	return;
 }
 
