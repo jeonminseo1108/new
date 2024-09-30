@@ -99,7 +99,7 @@ char* gen_tree_shape(bool is_last, unsigned int flags, const char *pstr) {
 	char *result;
 	int warn = 0;
 	if(flags & F_TREE) {
-		result = (char*)malloc(sizeof(char)*(pstr_len + 3));
+		result = (char*)malloc(sizeof(char)*(len + 3));
 		if(result == NULL) panic("Out of memory.");
 		strncpy(result, pstr, len);
 		result[len + 2] = '\0';
@@ -126,13 +126,13 @@ void print_verbose(struct stat *stat){
 	char *user = upwd->pw_name;
 	char *group = ggrp->gr_name;
 	
-	if(S_ISREG(fmode)) type = ' ';
-	else if(S_ISDIR(fmode)) type = 'd';
-	else if(S_ISCHR(fmode)) type = 'c';
-	else if(S_ISLNK(fmode)) type = 'l';
-	else if(S_ISFIFO(fmode)) type = 'f';
-	else if(S_ISBLK(fmode)) type = 'b';
-	else if(S_ISSOCK(fmode)) type = 's';
+	if(S_ISREG(stat->st_mode)) type = ' ';
+	else if(S_ISDIR(stat->st_mode)) type = 'd';
+	else if(S_ISCHR(stat->st_mode)) type = 'c';
+	else if(S_ISLNK(stat->st_mode)) type = 'l';
+	else if(S_ISFIFO(stat->st_mode)) type = 'f';
+	else if(S_ISBLK(stat->st_mode)) type = 'b';
+	else if(S_ISSOCK(stat->st_mode)) type = 's';
 	else type = '\0';
 
 	printf("  %8s:%-8s  %10ld  %8ld  %c", user, group, stat->st_size, stat->st_blocks, type);
@@ -143,13 +143,13 @@ void print_errno(const char *pstr, unsigned int flags){
 	char *error_pstr = gen_tree_shape(true, flags, pstr);
 	switch(errno) {
 		case EACCES:
-			printf("%sERROR: Permission denied\n", err_pstr);
+			printf("%sERROR: Permission denied\n", error_pstr);
 			break;
 		case ENOENT:
-			printf("%sERROR: No such file or directory\n", err_pstr);
+			printf("%sERROR: No such file or directory\n", error_pstr);
 			break;
 		case ENOTDIR:
-			printf("%sERROR: Not a directory\n", err_pstr);
+			printf("%sERROR: Not a directory\n", error_pstr);
 			break;
 		case ENOMEM:
 			panic("Out of memory.");
@@ -159,7 +159,7 @@ void print_errno(const char *pstr, unsigned int flags){
 			printf("ERROR: error code %d\n", errno);
 			panic("quit process");
 	}
-	free(err_pstr);
+	free(error_pstr);
 	return;
 }
 
@@ -226,7 +226,7 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		if(flags & F_VERBOSE) print_verbose(i_stat);
 		printf("\n");
 
-		update_stat(stats, i_stat);//error일듯
+		update_stat(stats, &i_stat);
 		
 		if (S_ISDIR(i_stat.st_mode)) {
 			warn = asprintf(&path, "%s/", path);
@@ -235,6 +235,7 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		}
 		free(path);
 		free(next_pstr);
+		free(final_pstr);
 	}
 	closedir(dir);
 	free(dirents);
