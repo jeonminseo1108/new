@@ -188,10 +188,8 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 	int warn=0;
 	
 	if (dn[strlen(dn)-1] != '/'){
-		char *new_dn;
-		warn = asprintf(&new_dn, "%s/", dn);
+		warn = asprintf(&dn, "%s/", dn);
 		if(warn == -1) panic("Out of memory.");
-		dn=new_dn;
 	}
 	DIR *dir = opendir(dn);
 	
@@ -238,7 +236,6 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 		}
 		free(path);
 		free(next_pstr);
-		free(final_pstr);
 	}
 	closedir(dir);
 	free(dirents);
@@ -338,7 +335,7 @@ int main(int argc, char *argv[])
   for(int i=0;i<ndir;i++){
 	  struct summary dstat = {0};// each directory summary
 	  if(flags & F_SUMMARY) {
-	  	if(flags & F_VERBOSE) printf("Name                                                        User:Group           Size    Blocks Type\n");
+	  	if(flags & F_VERBOSE) printf("Name                                                        User:Group           Size    Blocks Type \n");
 	  	else printf("Name                                                                                                \n");
 		printf("----------------------------------------------------------------------------------------------------\n");
 	  }
